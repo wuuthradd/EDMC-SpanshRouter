@@ -1,57 +1,59 @@
-import tkinter.messagebox as confirmDialog
+import logging
 
-from SpanshRouter.SpanshRouter import SpanshRouter
+spansh_tools = None
+logger = logging.getLogger('SpanshTools')
 
-spansh_router = None
+
+def _start_plugin(plugin_dir):
+    global spansh_tools
+
+    from SpanshTools import SpanshTools
+
+    spansh_tools = SpanshTools(plugin_dir)
+    return 'spansh_tools'
 
 
 def plugin_start3(plugin_dir):
-    return plugin_start(plugin_dir)
+    return _start_plugin(plugin_dir)
 
 
 def plugin_start(plugin_dir):
-    global spansh_router
-    spansh_router = SpanshRouter(plugin_dir)
-    spansh_router.check_for_update()
-    return 'SpanshRouter'
+    return _start_plugin(plugin_dir)
 
 
 def plugin_stop():
-    global spansh_router
-    spansh_router.save_route()
+    global spansh_tools
+    if spansh_tools is None:
+        return
+    shutdown_ok = True
+    try:
+        shutdown_ok = bool(spansh_tools.shutdown())
+    except Exception:
+        shutdown_ok = False
+        logger.warning("Error while shutting down SpanshTools", exc_info=True)
 
-    if spansh_router.update_available:
-        spansh_router.install_update()
+    if shutdown_ok and spansh_tools.update_available and spansh_tools.has_staged_update():
+        spansh_tools.install_staged_update()
 
 
 def journal_entry(cmdr, is_beta, system, station, entry, state):
-    global spansh_router
-    if (entry['event'] in ['FSDJump', 'Location', 'SupercruiseEntry', 'SupercruiseExit']
-            and entry["StarSystem"].lower() == spansh_router.next_stop.lower()):
-        spansh_router.update_route()
-        spansh_router.set_source_ac(entry["StarSystem"])
-    elif entry['event'] == 'FSSDiscoveryScan' and entry['SystemName'] == spansh_router.next_stop:
-        spansh_router.update_route()
+    global spansh_tools
+    if not getattr(spansh_tools, 'frame', None):
+        return
+    spansh_tools.handle_journal_entry(system, entry, state)
 
 
-def ask_for_update():
-    global spansh_router
-    if spansh_router.update_available:
-        update_txt = "New Spansh Router update available!\n"
-        update_txt += "If you choose to install it, you will have to restart EDMC for it to take effect.\n\n"
-        update_txt += spansh_router.spansh_updater.changelogs
-        update_txt += "\n\nInstall?"
-        install_update = confirmDialog.askyesno("SpanshRouter", update_txt)
-
-        if install_update:
-            confirmDialog.showinfo("SpanshRouter", "The update will be installed as soon as you quit EDMC.")
-        else:
-            spansh_router.update_available = False
+def dashboard_entry(cmdr, is_beta, entry):
+    global spansh_tools
+    if not getattr(spansh_tools, 'frame', None):
+        return
+    spansh_tools.handle_dashboard_entry(entry)
 
 
 def plugin_app(parent):
-    global spansh_router
-    frame = spansh_router.init_gui(parent)
-    spansh_router.open_last_route()
-    parent.master.after_idle(ask_for_update)
+    global spansh_tools
+    frame = spansh_tools.init_gui(parent)
+    spansh_tools.open_last_route()
+    # Check for updates after GUI is ready (runs in background thread)
+    spansh_tools.check_for_update()
     return frame

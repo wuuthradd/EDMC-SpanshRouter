@@ -1,12 +1,8 @@
-# Ignore saved route files
-*.csv
-
-# Ignore compiles python files
-*.pyo
-*.pyc
-.vscode/settings.json
-
-.vscode/
-
-offset
-.idea/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+.pytest_cache/
+dist/
